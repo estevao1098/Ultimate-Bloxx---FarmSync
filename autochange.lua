@@ -107,14 +107,44 @@ getgenv().AutoChange.getAccountData = function()
     return HttpService:JSONEncode(account)
 end
 
+getgenv().AutoChange.MythicalFruits = {
+    "Kitsune-Kitsune", "Control-Control", "Dragon-Dragon", "Yeti-Yeti", "Dough-Dough",
+    "Gas-Gas", "T-Rex-T-Rex", "Tiger-Tiger", "Mammoth-Mammoth", "Spirit-Spirit",
+    "Venom-Venom", "Gravity-Gravity"
+}
+
 getgenv().AutoChange.Any = function(items)
     return { _any = true, items = items }
 end
 
+getgenv().AutoChange.Exclude = function(items)
+    return { _exclude = true, items = items }
+end
+
 getgenv().AutoChange.checkRequirements = function(data, requirements)
+    local excludeList = {}
+    if requirements['Fruits'] and type(requirements['Fruits']) == "table" and requirements['Fruits']._exclude then
+        excludeList = requirements['Fruits'].items or {}
+    end
+    
     for key, required in pairs(requirements) do
         local value = data[key]
-        if type(required) == "number" then
+        
+        if key == "MythicalFruits" then
+            local count = 0
+            local fruits = data["Fruits"] or {}
+            for _, fruit in pairs(fruits) do
+                local fruitName = type(fruit) == "table" and fruit.Name or fruit
+                local isMythical = table.find(getgenv().AutoChange.MythicalFruits, fruitName)
+                local isExcluded = table.find(excludeList, fruitName)
+                if isMythical and not isExcluded then
+                    count = count + 1
+                end
+            end
+            if count < required then return false end
+        elseif type(required) == "table" and required._exclude then
+            -- Exclude é usado junto com MythicalFruits, já processado acima
+        elseif type(required) == "number" then
             if (tonumber(value) or 0) < required then return false end
         elseif type(required) == "string" then
             local actualValue = type(value) == "table" and value.Name or value
