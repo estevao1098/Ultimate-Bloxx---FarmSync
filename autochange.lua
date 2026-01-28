@@ -1,8 +1,28 @@
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 
-local function getAccountData()
-    print("[getAccountData] Iniciando coleta de dados...")
+getgenv().AutoChange = {}
+
+local function safeInvoke(remote, timeout, ...)
+    local result = nil
+    local done = false
+    local args = {...}
     
+    task.spawn(function()
+        pcall(function()
+            result = remote:InvokeServer(unpack(args))
+        end)
+        done = true
+    end)
+    
+    local start = tick()
+    while not done and (tick() - start) < (timeout or 5) do
+        task.wait(0.1)
+    end
+    
+    return result
+end
+
+getgenv().AutoChange.getAccountData = function()
     local HttpService = game:GetService("HttpService")
     local Player = game.Players.LocalPlayer
     local CommF = game.ReplicatedStorage.Remotes.CommF_
@@ -14,32 +34,32 @@ local function getAccountData()
         Level = Data and Data.Level.Value or 0,
         Beli = Data and Data.Beli.Value or 0,
         Fragments = Data and Data.Fragments.Value or 0,
-        BountyHonor = Player.leaderstats and Player.leaderstats:FindFirstChild("Bounty/Honor") and Player.leaderstats["Bounty/Honor"].Value or 0,
+        BountyHonor = 0,
         Sea = PlaceId == 2753915549 and 1 or PlaceId == 4442272183 and 2 or PlaceId == 7449423635 and 3 or 0,
         Race = { Name = Data and Data.Race.Value or "", Version = 1, Full = false },
         Fruit = { Name = Data and Data.DevilFruit.Value or "", Mastery = 0, Awakened = false, AwakenedSkills = {} },
         Swords = {}, Melees = {}, Guns = {}, Fruits = {}, Accessories = {}, Materials = {},
         PullLever = false
     }
-    print("[getAccountData] Dados basicos OK - Level: " .. account.Level)
 
-    print("[getAccountData] Buscando inventario...")
     pcall(function()
-        local inventory = CommF:InvokeServer('getInventory')
-        if inventory then
-            for _, item in pairs(inventory) do
+        account.BountyHonor = Player.leaderstats and Player.leaderstats:FindFirstChild("Bounty/Honor") and Player.leaderstats["Bounty/Honor"].Value or 0
+    end)
+
+    local inventory = safeInvoke(CommF, 10, 'getInventory')
+    if inventory and type(inventory) == "table" then
+        for _, item in pairs(inventory) do
+            pcall(function()
                 if item.Type == "Sword" then table.insert(account.Swords, {Name = item.Name, Mastery = item.Mastery or 0})
                 elseif item.Type == "Gun" then table.insert(account.Guns, {Name = item.Name, Mastery = item.Mastery or 0})
                 elseif item.Type == "Blox Fruit" or item.Type == "Fruit" then table.insert(account.Fruits, item.Name)
                 elseif item.Type == "Wear" then table.insert(account.Accessories, item.Name)
                 elseif item.Type == "Material" then table.insert(account.Materials, {Name = item.Name, Count = item.Count or 1})
                 end
-            end
+            end)
         end
-    end)
-    print("[getAccountData] Inventario OK - Swords: " .. #account.Swords .. " Materials: " .. #account.Materials)
+    end
 
-    print("[getAccountData] Buscando fruit mastery...")
     pcall(function()
         local fruit = Data and Data:FindFirstChild("DevilFruit")
         if fruit and fruit.Value ~= "" then
@@ -47,51 +67,51 @@ local function getAccountData()
             if tool and tool:FindFirstChild("Level") then account.Fruit.Mastery = tool.Level.Value end
         end
     end)
-    print("[getAccountData] Fruit mastery OK")
 
-    print("[getAccountData] Buscando awakened skills...")
-    pcall(function()
-        local skills = CommF:InvokeServer("getAwakenedAbilities")
-        if skills then
-            for _, s in pairs(skills) do if s.Awakened then table.insert(account.Fruit.AwakenedSkills, s.Key) end end
-            account.Fruit.Awakened = #account.Fruit.AwakenedSkills > 0
+    local skills = safeInvoke(CommF, 5, "getAwakenedAbilities")
+    if skills and type(skills) == "table" then
+        for _, s in pairs(skills) do
+            pcall(function()
+                if s.Awakened then table.insert(account.Fruit.AwakenedSkills, s.Key) end
+            end)
         end
-    end)
-    print("[getAccountData] Awakened OK")
+        account.Fruit.Awakened = #account.Fruit.AwakenedSkills > 0
+    end
 
-    print("[getAccountData] Buscando melees especiais...")
-    pcall(function()
-        for _, m in pairs({"Superhuman", "ElectricClaw", "DragonTalon", "SharkmanKarate", "DeathStep", "Godhuman", "SanguineArt"}) do
-            if CommF:InvokeServer("Buy" .. m, true) == 1 then table.insert(account.Melees, m) end
-        end
-    end)
-    print("[getAccountData] Melees OK - " .. #account.Melees .. " encontrados")
+    for _, m in pairs({"Superhuman", "ElectricClaw", "DragonTalon", "SharkmanKarate", "DeathStep", "Godhuman", "SanguineArt"}) do
+        local status = safeInvoke(CommF, 3, "Buy" .. m, true)
+        if status == 1 then table.insert(account.Melees, m) end
+    end
 
-    print("[getAccountData] Buscando PullLever...")
-    pcall(function() account.PullLever = CommF:InvokeServer("CheckTempleDoor") end)
-    print("[getAccountData] PullLever OK")
+    local pullLever = safeInvoke(CommF, 3, "CheckTempleDoor")
+    if pullLever then account.PullLever = pullLever end
 
-    print("[getAccountData] Buscando Race version...")
     pcall(function()
         local hasV4 = Player.Character and Player.Character:FindFirstChild("RaceTransformed")
-        if hasV4 then account.Race.Version = 4
-        elseif CommF:InvokeServer("Wenlocktoad", "1") == -2 then account.Race.Version = 3
-        elseif CommF:InvokeServer("Alchemist", "1") == -2 then account.Race.Version = 2
-        else account.Race.Version = 1 end
+        if hasV4 then 
+            account.Race.Version = 4
+        else
+            local wenlock = safeInvoke(CommF, 3, "Wenlocktoad", "1")
+            if wenlock == -2 then 
+                account.Race.Version = 3
+            else
+                local alchemist = safeInvoke(CommF, 3, "Alchemist", "1")
+                if alchemist == -2 then 
+                    account.Race.Version = 2
+                end
+            end
+        end
         account.Race.Full = account.Race.Version == 4
     end)
-    print("[getAccountData] Race OK - V" .. account.Race.Version)
 
-    local json = HttpService:JSONEncode(account)
-    print("[getAccountData] Coleta finalizada!")
-    return json
+    return HttpService:JSONEncode(account)
 end
 
-local function Any(items)
+getgenv().AutoChange.Any = function(items)
     return { _any = true, items = items }
 end
 
-local function checkRequirements(data, requirements)
+getgenv().AutoChange.checkRequirements = function(data, requirements)
     for key, required in pairs(requirements) do
         local value = data[key]
         if type(required) == "number" then
@@ -110,7 +130,7 @@ local function checkRequirements(data, requirements)
                         for _, v in pairs(value) do
                             if type(v) == "table" and v.Name == req.Name then
                                 local itemValue = v.Mastery or v.Count or 0
-                                if itemValue >= req.Value then anyFound = true break end
+                                if itemValue >= (req.Value or 0) then anyFound = true break end
                             end
                         end
                     else
@@ -128,7 +148,7 @@ local function checkRequirements(data, requirements)
                         for _, v in pairs(value) do
                             if type(v) == "table" and v.Name == req.Name then
                                 local itemValue = v.Mastery or v.Count or 0
-                                if itemValue >= req.Value then found = true break end
+                                if itemValue >= (req.Value or 0) then found = true break end
                             end
                         end
                     else
@@ -144,19 +164,41 @@ local function checkRequirements(data, requirements)
     return true
 end
 
-local function checkData(filters)
-    local data = getAccountData()
-    local account = game:GetService("HttpService"):JSONDecode(data)
+getgenv().AutoChange.checkData = function(filters)
+    local success, data = pcall(function()
+        return getgenv().AutoChange.getAccountData()
+    end)
+    
+    if not success or not data then
+        print("[AutoChange] Error collecting data")
+        return false, nil, nil
+    end
+    
+    local ok, account = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(data)
+    end)
+    
+    if not ok or not account then
+        print("[AutoChange] Error decoding data")
+        return false, nil, nil
+    end
 
     for _, filter in pairs(filters) do
-        if checkRequirements(account, filter.Requirements) then
-            print(filter.Name .. " - Requirements met!")
-            return true, filter.Folders.Input, filter.Folders.Output
+        local match = pcall(function()
+            return getgenv().AutoChange.checkRequirements(account, filter.Requirements)
+        end)
+        
+        if match then
+            local reqMet = getgenv().AutoChange.checkRequirements(account, filter.Requirements)
+            if reqMet then
+                print("[AutoChange] " .. filter.Name .. " - OK!")
+                return true, filter.Folders.Input, filter.Folders.Output
+            end
         end
     end
     
-    print("No requirements met!")
+    print("[AutoChange] No filter matched")
     return false, nil, nil
 end
 
-return checkData
+return getgenv().AutoChange
