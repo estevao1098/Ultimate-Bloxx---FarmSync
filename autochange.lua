@@ -1,6 +1,8 @@
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 
 local function getAccountData()
+    print("[getAccountData] Iniciando coleta de dados...")
+    
     local HttpService = game:GetService("HttpService")
     local Player = game.Players.LocalPlayer
     local CommF = game.ReplicatedStorage.Remotes.CommF_
@@ -19,18 +21,25 @@ local function getAccountData()
         Swords = {}, Melees = {}, Guns = {}, Fruits = {}, Accessories = {}, Materials = {},
         PullLever = false
     }
+    print("[getAccountData] Dados basicos OK - Level: " .. account.Level)
 
+    print("[getAccountData] Buscando inventario...")
     pcall(function()
-        for _, item in pairs(CommF:InvokeServer('getInventory')) do
-            if item.Type == "Sword" then table.insert(account.Swords, {Name = item.Name, Mastery = item.Mastery or 0})
-            elseif item.Type == "Gun" then table.insert(account.Guns, {Name = item.Name, Mastery = item.Mastery or 0})
-            elseif item.Type == "Blox Fruit" or item.Type == "Fruit" then table.insert(account.Fruits, item.Name)
-            elseif item.Type == "Wear" then table.insert(account.Accessories, item.Name)
-            elseif item.Type == "Material" then table.insert(account.Materials, {Name = item.Name, Count = item.Count or 1})
+        local inventory = CommF:InvokeServer('getInventory')
+        if inventory then
+            for _, item in pairs(inventory) do
+                if item.Type == "Sword" then table.insert(account.Swords, {Name = item.Name, Mastery = item.Mastery or 0})
+                elseif item.Type == "Gun" then table.insert(account.Guns, {Name = item.Name, Mastery = item.Mastery or 0})
+                elseif item.Type == "Blox Fruit" or item.Type == "Fruit" then table.insert(account.Fruits, item.Name)
+                elseif item.Type == "Wear" then table.insert(account.Accessories, item.Name)
+                elseif item.Type == "Material" then table.insert(account.Materials, {Name = item.Name, Count = item.Count or 1})
+                end
             end
         end
     end)
+    print("[getAccountData] Inventario OK - Swords: " .. #account.Swords .. " Materials: " .. #account.Materials)
 
+    print("[getAccountData] Buscando fruit mastery...")
     pcall(function()
         local fruit = Data and Data:FindFirstChild("DevilFruit")
         if fruit and fruit.Value ~= "" then
@@ -38,7 +47,9 @@ local function getAccountData()
             if tool and tool:FindFirstChild("Level") then account.Fruit.Mastery = tool.Level.Value end
         end
     end)
+    print("[getAccountData] Fruit mastery OK")
 
+    print("[getAccountData] Buscando awakened skills...")
     pcall(function()
         local skills = CommF:InvokeServer("getAwakenedAbilities")
         if skills then
@@ -46,15 +57,21 @@ local function getAccountData()
             account.Fruit.Awakened = #account.Fruit.AwakenedSkills > 0
         end
     end)
+    print("[getAccountData] Awakened OK")
 
+    print("[getAccountData] Buscando melees especiais...")
     pcall(function()
         for _, m in pairs({"Superhuman", "ElectricClaw", "DragonTalon", "SharkmanKarate", "DeathStep", "Godhuman", "SanguineArt"}) do
             if CommF:InvokeServer("Buy" .. m, true) == 1 then table.insert(account.Melees, m) end
         end
     end)
+    print("[getAccountData] Melees OK - " .. #account.Melees .. " encontrados")
 
+    print("[getAccountData] Buscando PullLever...")
     pcall(function() account.PullLever = CommF:InvokeServer("CheckTempleDoor") end)
+    print("[getAccountData] PullLever OK")
 
+    print("[getAccountData] Buscando Race version...")
     pcall(function()
         local hasV4 = Player.Character and Player.Character:FindFirstChild("RaceTransformed")
         if hasV4 then account.Race.Version = 4
@@ -63,9 +80,10 @@ local function getAccountData()
         else account.Race.Version = 1 end
         account.Race.Full = account.Race.Version == 4
     end)
+    print("[getAccountData] Race OK - V" .. account.Race.Version)
 
     local json = HttpService:JSONEncode(account)
-    if setclipboard then setclipboard(json) end
+    print("[getAccountData] Coleta finalizada!")
     return json
 end
 
