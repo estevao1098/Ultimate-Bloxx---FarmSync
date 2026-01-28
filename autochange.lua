@@ -142,6 +142,11 @@ getgenv().AutoChange.checkRequirements = function(data, requirements)
                 end
             end
             if count < required then return false end
+        elseif key == "Race" and type(required) == "table" then
+            local race = data["Race"] or {}
+            if required.Version and (race.Version or 0) < required.Version then return false end
+            if required.Full ~= nil and race.Full ~= required.Full then return false end
+            if required.Name and race.Name ~= required.Name then return false end
         elseif type(required) == "table" and required._exclude then
             -- Exclude é usado junto com MythicalFruits, já processado acima
         elseif type(required) == "number" then
