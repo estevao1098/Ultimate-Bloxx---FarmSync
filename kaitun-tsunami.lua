@@ -3,6 +3,7 @@ repeat task.wait() until game:IsLoaded()
 pcall(function() 
     UserSettings():GetService("UserGameSettings").MasterVolume = 0 
     UserSettings():GetService("UserGameSettings").SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+    setfpscap(15)
 end)
 
 local Players = game:GetService("Players")
