@@ -7,7 +7,30 @@ end)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
+
+local function AntiAFK()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.W, false, game)
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.W, false, game)
+    
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("Humanoid") then
+        char.Humanoid.Jump = true
+    end
+end
+
+LocalPlayer.Idled:Connect(AntiAFK)
+
+task.spawn(function()
+    while task.wait(300) do
+        AntiAFK()
+    end
+end)
 
 local EconomyMath = require(ReplicatedStorage.Shared.utils.EconomyMath)
 local ClientGlobals = require(ReplicatedStorage.Client.Modules.ClientGlobals)
