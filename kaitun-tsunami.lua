@@ -155,7 +155,7 @@ end)
 task.spawn(function()
     StatusUI.UpdateStatus("Running")
     
-    while task.wait(2) do
+    while task.wait(1) do
         local currentRebirth = CheckRebirth()
         local currentSpeed = CheckSpeed()
         
@@ -165,11 +165,24 @@ task.spawn(function()
         end
 
         if currentRebirth < TARGET_REBIRTH then
-            TryRebirth()
-            task.wait(1)
+            local can, reason = CanRebirth()
+            
+            if can then
+                TryRebirth()
+            else
+                local nextRebirth = currentRebirth + 1
+                local requiredSpeed = EconomyMath.GetRebirthRequiredSpeed(nextRebirth)
+                
+                if reason == "Insufficient speed" and currentSpeed < requiredSpeed then
+                    IncreaseSpeed(10)
+                    task.wait(0.5)
+                else
+                    StatusUI.UpdateAction("Waiting: " .. reason)
+                    task.wait(2)
+                end
+            end
         elseif currentSpeed < TARGET_SPEED then
             IncreaseSpeed(10)
-            task.wait(0.5)
         end
     end
 end)
