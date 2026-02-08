@@ -70,12 +70,19 @@ getgenv().AutoChange.getAccountData = function()
 
     local skills = safeInvoke(CommF, 5, "getAwakenedAbilities")
     if skills and type(skills) == "table" then
+        local totalSkills = 0
+        local awakenedCount = 0
         for _, s in pairs(skills) do
             pcall(function()
-                if s.Awakened then table.insert(account.Fruit.AwakenedSkills, s.Key) end
+                totalSkills = totalSkills + 1
+                if s.Awakened then 
+                    table.insert(account.Fruit.AwakenedSkills, s.Key) 
+                    awakenedCount = awakenedCount + 1
+                end
             end)
         end
-        account.Fruit.Awakened = #account.Fruit.AwakenedSkills > 0
+
+        account.Fruit.Awakened = totalSkills > 0 and awakenedCount == totalSkills
     end
 
     for _, m in pairs({"Superhuman", "ElectricClaw", "DragonTalon", "SharkmanKarate", "DeathStep", "Godhuman", "SanguineArt"}) do
@@ -101,7 +108,7 @@ getgenv().AutoChange.getAccountData = function()
                 end
             end
         end
-        account.Race.Full = account.Race.Version == 4
+        account.Race.Full = 
     end)
 
     return HttpService:JSONEncode(account)
@@ -117,14 +124,18 @@ getgenv().AutoChange.Any = function(items)
     return { _any = true, items = items }
 end
 
+getgenv().AutoChange.Skip = function(items)
+    return { _skip = true, items = items }
+end
+
 getgenv().AutoChange.Exclude = function(items)
     return { _exclude = true, items = items }
 end
 
 getgenv().AutoChange.checkRequirements = function(data, requirements)
-    local excludeList = {}
-    if requirements['Fruits'] and type(requirements['Fruits']) == "table" and requirements['Fruits']._exclude then
-        excludeList = requirements['Fruits'].items or {}
+    local skipList = {}
+    if requirements['Fruits'] and type(requirements['Fruits']) == "table" and requirements['Fruits']._skip then
+        skipList = requirements['Fruits'].items or {}
     end
     
     for key, required in pairs(requirements) do
@@ -136,8 +147,8 @@ getgenv().AutoChange.checkRequirements = function(data, requirements)
             for _, fruit in pairs(fruits) do
                 local fruitName = type(fruit) == "table" and fruit.Name or fruit
                 local isMythical = table.find(getgenv().AutoChange.MythicalFruits, fruitName)
-                local isExcluded = table.find(excludeList, fruitName)
-                if isMythical and not isExcluded then
+                local isSkipped = table.find(skipList, fruitName)
+                if isMythical and not isSkipped then
                     count = count + 1
                 end
             end
@@ -147,8 +158,19 @@ getgenv().AutoChange.checkRequirements = function(data, requirements)
             if required.Version and (race.Version or 0) < required.Version then return false end
             if required.Full ~= nil and race.Full ~= required.Full then return false end
             if required.Name and race.Name ~= required.Name then return false end
+        elseif type(required) == "table" and required._skip then
+            -- Skip é usado junto com MythicalFruits, já processado acima
         elseif type(required) == "table" and required._exclude then
-            -- Exclude é usado junto com MythicalFruits, já processado acima
+            -- Exclude: se a conta tiver QUALQUER um dos itens, retorna false
+            local items = required.items or {}
+            for _, excludeItem in pairs(items) do
+                for _, v in pairs(value or {}) do
+                    local itemName = type(v) == "table" and v.Name or v
+                    if itemName == excludeItem then
+                        return false
+                    end
+                end
+            end
         elseif type(required) == "number" then
             if (tonumber(value) or 0) < required then return false end
         elseif type(required) == "string" then
