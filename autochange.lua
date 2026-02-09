@@ -108,7 +108,7 @@ getgenv().AutoChange.getAccountData = function()
                 end
             end
         end
-        account.Race.Full = 
+        account.Race.Full = false
     end)
 
     return HttpService:JSONEncode(account)
