@@ -227,8 +227,7 @@ getgenv().AutoChange.checkData = function(filters)
     end)
     
     if not success or not data then
-        print("[AutoChange] Error collecting data")
-        return false, nil, nil
+        return false, nil, nil, nil
     end
     
     local ok, account = pcall(function()
@@ -236,8 +235,7 @@ getgenv().AutoChange.checkData = function(filters)
     end)
     
     if not ok or not account then
-        print("[AutoChange] Error decoding data")
-        return false, nil, nil
+        return false, nil, nil, nil
     end
 
     for _, filter in pairs(filters) do
@@ -248,14 +246,12 @@ getgenv().AutoChange.checkData = function(filters)
         if match then
             local reqMet = getgenv().AutoChange.checkRequirements(account, filter.Requirements)
             if reqMet then
-                print("[AutoChange] " .. filter.Name .. " - OK!")
-                return true, filter.Folders.Input, filter.Folders.Output
+                return true, filter.Folders.Input, filter.Folders.Output, filter.Name
             end
         end
     end
     
-    print("[AutoChange] No filter matched")
-    return false, nil, nil
+    return false, nil, nil, nil
 end
 
 return getgenv().AutoChange
