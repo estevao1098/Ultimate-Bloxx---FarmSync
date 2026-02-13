@@ -97,6 +97,9 @@ getgenv().AutoChange.getAccountData = function()
         local hasV4 = Player.Character and Player.Character:FindFirstChild("RaceTransformed")
         if hasV4 then 
             account.Race.Version = 4
+            -- Verifica se V4 está completo (status 5 = Full Gear, Full 5 Training Sessions)
+            local upgradeStatus = safeInvoke(CommF, 3, "UpgradeRace", "Check")
+            account.Race.Full = (upgradeStatus == 5)
         else
             local wenlock = safeInvoke(CommF, 3, "Wenlocktoad", "1")
             if wenlock == -2 then 
@@ -107,8 +110,8 @@ getgenv().AutoChange.getAccountData = function()
                     account.Race.Version = 2
                 end
             end
+            account.Race.Full = false
         end
-        account.Race.Full = false
     end)
 
     return HttpService:JSONEncode(account)
@@ -221,12 +224,118 @@ getgenv().AutoChange.checkRequirements = function(data, requirements)
     return true
 end
 
-getgenv().AutoChange.checkData = function(filters)
+-- Função para verificar requisitos com log detalhado
+getgenv().AutoChange.checkRequirementsWithLog = function(data, requirements, filterName)
+    local skipList = {}
+    if requirements['Fruits'] and type(requirements['Fruits']) == "table" and requirements['Fruits']._skip then
+        skipList = requirements['Fruits'].items or {}
+    end
+    
+    local missing = {}
+    
+    for key, required in pairs(requirements) do
+        local value = data[key]
+        local passed = true
+        local reason = ""
+        
+        if key == "MythicalFruits" then
+            local count = 0
+            local fruits = data["Fruits"] or {}
+            for _, fruit in pairs(fruits) do
+                local fruitName = type(fruit) == "table" and fruit.Name or fruit
+                local isMythical = table.find(getgenv().AutoChange.MythicalFruits, fruitName)
+                local isSkipped = table.find(skipList, fruitName)
+                if isMythical and not isSkipped then
+                    count = count + 1
+                end
+            end
+            if count < required then 
+                passed = false
+                reason = "MythicalFruits: " .. count .. "/" .. required
+            end
+        elseif key == "Race" and type(required) == "table" then
+            local race = data["Race"] or {}
+            if required.Version and (race.Version or 0) < required.Version then 
+                passed = false
+                reason = "Race Version: " .. (race.Version or 0) .. "/" .. required.Version
+            end
+        elseif type(required) == "table" and required._exclude then
+            local items = required.items or {}
+            for _, excludeItem in pairs(items) do
+                for _, v in pairs(value or {}) do
+                    local itemName = type(v) == "table" and v.Name or v
+                    if itemName == excludeItem then
+                        passed = false
+                        reason = "Exclude: tem " .. excludeItem
+                        break
+                    end
+                end
+                if not passed then break end
+            end
+        elseif type(required) == "number" then
+            if (tonumber(value) or 0) < required then 
+                passed = false
+                reason = key .. ": " .. (tonumber(value) or 0) .. "/" .. required
+            end
+        elseif type(required) == "string" then
+            local actualValue = type(value) == "table" and value.Name or value
+            if actualValue ~= required then 
+                passed = false
+                reason = key .. ": " .. tostring(actualValue) .. " != " .. required
+            end
+        elseif type(required) == "table" and type(value) == "table" and not required._skip then
+            local items = required._any and required.items or required
+            
+            for _, req in pairs(items) do
+                local found = false
+                if type(req) == "table" and req.Name then
+                    for _, v in pairs(value) do
+                        if type(v) == "table" and v.Name == req.Name then
+                            local itemValue = v.Mastery or v.Count or 0
+                            if itemValue >= (req.Value or 0) then 
+                                found = true 
+                            else
+                                reason = req.Name .. " Mastery: " .. itemValue .. "/" .. (req.Value or 0)
+                            end
+                            break
+                        end
+                    end
+                    if not found and reason == "" then
+                        reason = "Falta: " .. req.Name
+                    end
+                else
+                    for _, v in pairs(value) do
+                        if (type(v) == "table" and v.Name or v) == req then found = true break end
+                    end
+                    if not found then
+                        reason = "Falta: " .. tostring(req)
+                    end
+                end
+                if not found then 
+                    passed = false
+                    if not required._any then break end
+                elseif required._any then
+                    passed = true
+                    break
+                end
+            end
+        end
+        
+        if not passed and reason ~= "" then
+            table.insert(missing, reason)
+        end
+    end
+    
+    return #missing == 0, missing
+end
+
+getgenv().AutoChange.checkData = function(filters, debug)
     local success, data = pcall(function()
         return getgenv().AutoChange.getAccountData()
     end)
     
     if not success or not data then
+        if debug then print("❌ [AutoChange] Erro ao coletar dados") end
         return false, nil, nil, nil
     end
     
@@ -235,7 +344,30 @@ getgenv().AutoChange.checkData = function(filters)
     end)
     
     if not ok or not account then
+        if debug then print("❌ [AutoChange] Erro ao decodificar dados") end
         return false, nil, nil, nil
+    end
+
+    if debug then
+        print("📊 [AutoChange] Dados da conta:")
+        print("   Level: " .. (account.Level or 0))
+        print("   Melees: " .. table.concat(account.Melees or {}, ", "))
+        local swords = {}
+        for _, s in pairs(account.Swords or {}) do
+            table.insert(swords, s.Name .. "(" .. (s.Mastery or 0) .. ")")
+        end
+        print("   Swords: " .. table.concat(swords, ", "))
+        local guns = {}
+        for _, g in pairs(account.Guns or {}) do
+            table.insert(guns, g.Name .. "(" .. (g.Mastery or 0) .. ")")
+        end
+        print("   Guns: " .. table.concat(guns, ", "))
+        local mats = {}
+        for _, m in pairs(account.Materials or {}) do
+            table.insert(mats, m.Name)
+        end
+        print("   Materials: " .. table.concat(mats, ", "))
+        print("   Accessories: " .. table.concat(account.Accessories or {}, ", "))
     end
 
     for _, filter in pairs(filters) do
@@ -247,6 +379,9 @@ getgenv().AutoChange.checkData = function(filters)
             local reqMet = getgenv().AutoChange.checkRequirements(account, filter.Requirements)
             if reqMet then
                 return true, filter.Folders.Input, filter.Folders.Output, filter.Name
+            elseif debug then
+                local _, missing = getgenv().AutoChange.checkRequirementsWithLog(account, filter.Requirements, filter.Name)
+                print("❌ " .. filter.Name .. ": " .. table.concat(missing, " | "))
             end
         end
     end
